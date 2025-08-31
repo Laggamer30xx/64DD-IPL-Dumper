@@ -951,7 +951,10 @@ int fat_find_create(char *filename, fat_dirent *folder, fat_dirent *result_de, i
         dir_buffer_dirty = 1;
 		_fat_flush_fat();
 
-        // TODO check for inconsistency here
+        // Verify directory index and sector are valid
+        if (folder->index >= DE_PER_SECTOR || folder->sector >= folder->size) {
+            return -1; // Invalid directory state
+        }
         ++folder->index;
         _fat_load_dir_sector(folder);
     }
@@ -1229,6 +1232,7 @@ void loadRamToRom(uint32_t ramaddr, uint32_t clus)
 // sector read from file
 unsigned char file_buffer[512];
 uint32_t file_buffer_sector = 0;
+int file_buffer_dirty = 0;
  
 // helper functions
 static int _fat_load_file_sector(fat_file_t *file);
@@ -1404,7 +1408,11 @@ static int _fat_load_file_sector(fat_file_t *file) {
     // sector may or may not have changed, but buffering makes this efficient
     sector = CLUSTER_TO_SECTOR(file->cluster) + file->sector;
 
-    // TODO dirty file cluster?
+    // Check if current cluster is dirty before changing sectors
+    if (file_buffer_dirty && file_buffer_sector != sector) {
+        ciWriteSector(file_buffer, file_buffer_sector);
+        file_buffer_dirty = 0;
+    }
     if (file_buffer_sector != sector) {
         ciReadSector(file_buffer, sector);
         file_buffer_sector = sector;
